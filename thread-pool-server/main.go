@@ -1,8 +1,9 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 )
 
@@ -33,39 +34,38 @@ func handleConnection(conn net.Conn) {
 
 	fmt.Println("Client connected:", conn.RemoteAddr())
 
-	scanner := bufio.NewScanner(conn)
-	writer := bufio.NewWriter(conn)
+	buffer := make([]byte, 1024)
+	pending := make([]byte, 0)
 
-	for scanner.Scan() {
-		request := scanner.Text()
+	for {
+		n, err := conn.Read(buffer)
 
-		fmt.Printf("Received from %s: %q\n", conn.RemoteAddr(), request)
+		if n > 0 {
+			pending = append(pending, buffer[:n]...)
 
-		if request == "quit" {
-			if _, err := writer.WriteString("Goodbye\n"); err != nil {
-				fmt.Println("Error writing:", err)
-				return
+			for {
+				eolIdx := bytes.IndexByte(pending, '\n')
+				if eolIdx == -1 {
+					break
+				}
+
+				request := string(pending[:eolIdx])
+				pending = pending[eolIdx+1:]
+
+				fmt.Println("Received from", conn.RemoteAddr(), ": ", request)
+
+				conn.Write([]byte("OK\n"))
 			}
+		}
 
-			if err := writer.Flush(); err != nil {
-				fmt.Println("Error flushing: ", err)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Closed connection from ", conn.RemoteAddr())
+			} else {
+				fmt.Println("Error when reading request: ", err)
 			}
 			return
 		}
-
-		if _, err := writer.WriteString("Message received: " + request + "\n"); err != nil {
-			fmt.Println("Error writing: ", err)
-		}
-
-		if err := writer.Flush(); err != nil {
-			fmt.Println("Error flusing: ", err)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Println("Error reading:", err)
-	} else {
-		fmt.Println("Client closed connection:", conn.RemoteAddr())
 	}
 }
 
