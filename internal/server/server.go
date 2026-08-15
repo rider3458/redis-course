@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"syscall"
 
 	"github.com/rider3458/redis-course/internal/io_multiplexing"
+	"github.com/rider3458/redis-course/internal/protocol"
 )
 
 type Server struct {
@@ -17,6 +19,7 @@ type Server struct {
 type ServerConfig struct {
 	Address              string
 	UseIOMultiplexing    bool
+	UseRESPProtocol      bool
 	MaxConnections       int
 	IsPoolEnabled        bool
 	PoolSize             int
@@ -41,6 +44,19 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		if n > 0 {
 			pending = append(pending, buffer[:n]...)
+
+			if s.config.UseRESPProtocol {
+				respErr := s.processRESPBuffer(&pending, func(cmd *protocol.Command) error {
+					fmt.Println("Received from", conn.RemoteAddr(), ":", cmd.Cmd, cmd.Args)
+					_, writeErr := conn.Write([]byte(formatParsedCommand(cmd)))
+					return writeErr
+				})
+				if respErr != nil {
+					fmt.Println("Error when parsing request: ", respErr)
+					return
+				}
+				continue
+			}
 
 			for {
 				eolIdx := bytes.IndexByte(pending, '\n')
@@ -206,30 +222,52 @@ func (s *Server) serveWithIOMultiplexing() {
 			if n > 0 {
 				pending[event.Fd] = append(pending[event.Fd], buffer[:n]...)
 
-				for {
-					eolIdx := bytes.IndexByte(pending[event.Fd], '\n')
-					if eolIdx == -1 {
-						break
+				if s.config.UseRESPProtocol {
+					pendingBuffer := pending[event.Fd]
+					respErr := s.processRESPBuffer(&pendingBuffer, func(cmd *protocol.Command) error {
+						fmt.Println("Received from fd", event.Fd, ":", cmd.Cmd, cmd.Args)
+
+						response := []byte(formatParsedCommand(cmd))
+						for len(response) > 0 {
+							written, writeErr := syscall.Write(event.Fd, response)
+							if writeErr != nil {
+								return writeErr
+							}
+							response = response[written:]
+						}
+						return nil
+					})
+					pending[event.Fd] = pendingBuffer
+					if respErr != nil {
+						readErr = respErr
 					}
+				} else {
 
-					request := string(pending[event.Fd][:eolIdx])
-					pending[event.Fd] = pending[event.Fd][eolIdx+1:]
-
-					fmt.Println("Received from fd", event.Fd, ": ", request)
-
-					response := []byte("OK\n")
-					for len(response) > 0 {
-						written, writeErr := syscall.Write(event.Fd, response)
-						if writeErr != nil {
-							fmt.Println("Error when writing response:", writeErr)
-							readErr = writeErr
+					for {
+						eolIdx := bytes.IndexByte(pending[event.Fd], '\n')
+						if eolIdx == -1 {
 							break
 						}
-						response = response[written:]
-					}
 
-					if readErr != nil {
-						break
+						request := string(pending[event.Fd][:eolIdx])
+						pending[event.Fd] = pending[event.Fd][eolIdx+1:]
+
+						fmt.Println("Received from fd", event.Fd, ": ", request)
+
+						response := []byte("OK\n")
+						for len(response) > 0 {
+							written, writeErr := syscall.Write(event.Fd, response)
+							if writeErr != nil {
+								fmt.Println("Error when writing response:", writeErr)
+								readErr = writeErr
+								break
+							}
+							response = response[written:]
+						}
+
+						if readErr != nil {
+							break
+						}
 					}
 				}
 			}
@@ -248,5 +286,30 @@ func (s *Server) serveWithIOMultiplexing() {
 				delete(pending, event.Fd)
 			}
 		}
+	}
+}
+
+func formatParsedCommand(cmd *protocol.Command) string {
+	if len(cmd.Args) == 0 {
+		return cmd.Cmd + "\n"
+	}
+	return cmd.Cmd + " " + strings.Join(cmd.Args, " ") + "\n"
+}
+
+func (s *Server) processRESPBuffer(pending *[]byte, onCommand func(cmd *protocol.Command) error) error {
+	for {
+		cmd, consumed, err := protocol.ParseCommand(*pending)
+		if err != nil {
+			if err == protocol.ErrIncompleteRESP {
+				return nil
+			}
+			return err
+		}
+
+		if err := onCommand(cmd); err != nil {
+			return err
+		}
+
+		*pending = (*pending)[consumed:]
 	}
 }
