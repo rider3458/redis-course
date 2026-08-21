@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"syscall"
 
 	"github.com/rider3458/redis-course/internal/io_multiplexing"
@@ -48,7 +47,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 			if s.config.UseRESPProtocol {
 				respErr := s.processRESPBuffer(&pending, func(cmd *protocol.Command) error {
 					fmt.Println("Received from", conn.RemoteAddr(), ":", cmd.Cmd, cmd.Args)
-					_, writeErr := conn.Write([]byte(formatParsedCommand(cmd)))
+					_, writeErr := conn.Write(buildRESPReply(cmd))
 					return writeErr
 				})
 				if respErr != nil {
@@ -227,7 +226,7 @@ func (s *Server) serveWithIOMultiplexing() {
 					respErr := s.processRESPBuffer(&pendingBuffer, func(cmd *protocol.Command) error {
 						fmt.Println("Received from fd", event.Fd, ":", cmd.Cmd, cmd.Args)
 
-						response := []byte(formatParsedCommand(cmd))
+						response := buildRESPReply(cmd)
 						for len(response) > 0 {
 							written, writeErr := syscall.Write(event.Fd, response)
 							if writeErr != nil {
@@ -289,11 +288,9 @@ func (s *Server) serveWithIOMultiplexing() {
 	}
 }
 
-func formatParsedCommand(cmd *protocol.Command) string {
-	if len(cmd.Args) == 0 {
-		return cmd.Cmd + "\n"
-	}
-	return cmd.Cmd + " " + strings.Join(cmd.Args, " ") + "\n"
+func buildRESPReply(cmd *protocol.Command) []byte {
+	_ = cmd
+	return protocol.EncodeSimpleString("OK")
 }
 
 func (s *Server) processRESPBuffer(pending *[]byte, onCommand func(cmd *protocol.Command) error) error {

@@ -245,6 +245,24 @@ func TestDecode(t *testing.T) {
 	})
 }
 
+func TestEncodeHelpers(t *testing.T) {
+	t.Run("EncodeSimpleString", func(t *testing.T) {
+		got := EncodeSimpleString("PONG")
+		want := []byte("+PONG\r\n")
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("EncodeSimpleString mismatch: got %q want %q", string(got), string(want))
+		}
+	})
+
+	t.Run("EncodeError", func(t *testing.T) {
+		got := EncodeError("ERR nope")
+		want := []byte("-ERR nope\r\n")
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("EncodeError mismatch: got %q want %q", string(got), string(want))
+		}
+	})
+}
+
 func TestParseCommandExact(t *testing.T) {
 	t.Run("exact success", func(t *testing.T) {
 		input := []byte("*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n")

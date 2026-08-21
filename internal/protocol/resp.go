@@ -106,6 +106,14 @@ func Decode(data []byte) (interface{}, error) {
 	return value, nil
 }
 
+func EncodeSimpleString(value string) []byte {
+	return []byte("+" + value + "\r\n")
+}
+
+func EncodeError(message string) []byte {
+	return []byte("-" + message + "\r\n")
+}
+
 // ParseCommandExact parses a single RESP command and requires the full input
 // to be consumed by that command.
 func ParseCommandExact(data []byte) (*Command, error) {
