@@ -1,9 +1,16 @@
 package protocol
 
 // HandleINCR processes the INCR command.
-//
-// TODO: Implement command behavior.
 func HandleINCR(cmd *Command) []byte {
-	_ = cmd
-	panic("TODO: INCR is not implemented")
+	store := commandStore()
+	if len(cmd.Args) != 1 {
+		return EncodeWrongArity("incr")
+	}
+
+	next, err := store.Incr(cmd.Args[0])
+	if err != nil {
+		return EncodeNotInteger()
+	}
+
+	return EncodeInteger(next)
 }
