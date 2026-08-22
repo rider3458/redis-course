@@ -289,8 +289,7 @@ func (s *Server) serveWithIOMultiplexing() {
 }
 
 func buildRESPReply(cmd *protocol.Command) []byte {
-	_ = cmd
-	return protocol.EncodeSimpleString("OK")
+	return protocol.DispatchCommand(cmd)
 }
 
 func (s *Server) processRESPBuffer(pending *[]byte, onCommand func(cmd *protocol.Command) error) error {
