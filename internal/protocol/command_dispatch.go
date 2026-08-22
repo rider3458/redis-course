@@ -13,6 +13,10 @@ func DispatchCommand(cmd *Command) []byte {
 		return HandleSET(cmd)
 	case "GET":
 		return HandleGET(cmd)
+	case "EXPIRE":
+		return HandleEXPIRE(cmd)
+	case "TTL":
+		return HandleTTL(cmd)
 	case "DEL":
 		return HandleDEL(cmd)
 	case "EXISTS":
