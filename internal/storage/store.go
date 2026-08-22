@@ -64,8 +64,7 @@ func (s *Store) Get(key string) (string, bool) {
 
 func (s *Store) Expire(key string, ttl time.Duration) bool {
 	if ttl <= 0 {
-		s.Delete(key)
-		return true
+		return s.Delete(key) > 0
 	}
 
 	expiresAt := time.Now().UTC().Add(ttl)
@@ -83,6 +82,42 @@ func (s *Store) Expire(key string, ttl time.Duration) bool {
 	s.data[key] = record
 	s.mu.Unlock()
 	return true
+}
+
+func (s *Store) TTL(key string) int64 {
+	s.mu.RLock()
+	record, ok := s.data[key]
+	s.mu.RUnlock()
+	if !ok {
+		return -2
+	}
+
+	if isExpired(record) {
+		s.mu.Lock()
+		current, exists := s.data[key]
+		if exists && isExpired(current) {
+			delete(s.data, key)
+		}
+		s.mu.Unlock()
+		return -2
+	}
+
+	if record.TTL.IsZero() {
+		return -1
+	}
+
+	remaining := time.Until(record.TTL)
+	if remaining <= 0 {
+		s.mu.Lock()
+		current, exists := s.data[key]
+		if exists && isExpired(current) {
+			delete(s.data, key)
+		}
+		s.mu.Unlock()
+		return -2
+	}
+
+	return int64(remaining / time.Second)
 }
 
 func (s *Store) Delete(keys ...string) int {

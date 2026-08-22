@@ -62,6 +62,55 @@ func TestExpire(t *testing.T) {
 	}
 }
 
+func TestExpireMissingKeyReturnsFalse(t *testing.T) {
+	s := New()
+
+	ok := s.Expire("missing", time.Second)
+	if ok {
+		t.Fatal("expected expire to fail for missing key")
+	}
+}
+
+func TestTTLNoExpireReturnsMinusOne(t *testing.T) {
+	s := New()
+	s.Set("k", "v", 0)
+
+	got := s.TTL("k")
+	if got != -1 {
+		t.Fatalf("unexpected TTL: got=%d want=%d", got, -1)
+	}
+}
+
+func TestTTLMissingReturnsMinusTwo(t *testing.T) {
+	s := New()
+
+	got := s.TTL("missing")
+	if got != -2 {
+		t.Fatalf("unexpected TTL: got=%d want=%d", got, -2)
+	}
+}
+
+func TestTTLForExpiringKey(t *testing.T) {
+	s := New()
+	s.Set("k", "v", 5*time.Second)
+
+	got := s.TTL("k")
+	if got < 0 || got > 5 {
+		t.Fatalf("unexpected TTL range: got=%d", got)
+	}
+}
+
+func TestTTLExpiredReturnsMinusTwo(t *testing.T) {
+	s := New()
+	s.Set("k", "v", 10*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+
+	got := s.TTL("k")
+	if got != -2 {
+		t.Fatalf("unexpected TTL: got=%d want=%d", got, -2)
+	}
+}
+
 func TestIncr(t *testing.T) {
 	s := New()
 
