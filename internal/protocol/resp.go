@@ -110,6 +110,18 @@ func EncodeSimpleString(value string) []byte {
 	return []byte("+" + value + "\r\n")
 }
 
+func EncodeBulkString(value string) []byte {
+	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(value), value))
+}
+
+func EncodeNullBulkString() []byte {
+	return []byte("$-1\r\n")
+}
+
+func EncodeInteger(value int64) []byte {
+	return []byte(":" + strconv.FormatInt(value, 10) + "\r\n")
+}
+
 func EncodeError(message string) []byte {
 	return []byte("-" + message + "\r\n")
 }
