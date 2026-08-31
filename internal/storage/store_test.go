@@ -144,3 +144,72 @@ func TestIncrRejectsNonInteger(t *testing.T) {
 		t.Fatalf("unexpected error: got=%v want=%v", err, ErrNotInteger)
 	}
 }
+
+func TestSAddAndSMembers(t *testing.T) {
+	s := New()
+
+	added, err := s.SAdd("letters", "a", "b", "a")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if added != 2 {
+		t.Fatalf("unexpected added count: got=%d want=%d", added, 2)
+	}
+
+	members, err := s.SMembers("letters")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(members) != 2 || members[0] != "a" || members[1] != "b" {
+		t.Fatalf("unexpected members: %#v", members)
+	}
+}
+
+func TestSRemAndSIsMember(t *testing.T) {
+	s := New()
+	_, _ = s.SAdd("letters", "a", "b", "c")
+
+	removed, err := s.SRem("letters", "b", "x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("unexpected removed count: got=%d want=%d", removed, 1)
+	}
+
+	member, err := s.SIsMember("letters", "b")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if member != 0 {
+		t.Fatalf("unexpected membership: got=%d want=%d", member, 0)
+	}
+}
+
+func TestSetOpsOnStringKeyReturnWrongType(t *testing.T) {
+	s := New()
+	s.Set("k", "v", 0)
+
+	if _, err := s.SAdd("k", "a"); err != ErrWrongType {
+		t.Fatalf("expected ErrWrongType from SAdd, got %v", err)
+	}
+	if _, err := s.SRem("k", "a"); err != ErrWrongType {
+		t.Fatalf("expected ErrWrongType from SRem, got %v", err)
+	}
+	if _, err := s.SIsMember("k", "a"); err != ErrWrongType {
+		t.Fatalf("expected ErrWrongType from SIsMember, got %v", err)
+	}
+	if _, err := s.SMembers("k"); err != ErrWrongType {
+		t.Fatalf("expected ErrWrongType from SMembers, got %v", err)
+	}
+}
+
+func TestExistsCountsSetKeys(t *testing.T) {
+	s := New()
+	_, _ = s.SAdd("letters", "a")
+
+	count := s.Exists("letters")
+	if count != 1 {
+		t.Fatalf("unexpected exists count: got=%d want=%d", count, 1)
+	}
+}

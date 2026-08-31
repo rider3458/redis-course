@@ -23,6 +23,15 @@ func DispatchCommand(cmd *Command) []byte {
 		return HandleEXISTS(cmd)
 	case "INCR":
 		return HandleINCR(cmd)
+	case "SADD":
+		return HandleSADD(cmd)
+	case "SREM":
+		return HandleSREM(cmd)
+	case "SISMEMBER":
+		return HandleSISMEMBER(cmd)
+	case "SMEMBERS":
+		return HandleSMEMBERS(cmd)
+
 	default:
 		return EncodeUnknownCommand(cmd.Cmd)
 	}

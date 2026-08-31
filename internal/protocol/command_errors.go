@@ -14,3 +14,8 @@ func EncodeWrongArity(commandName string) []byte {
 func EncodeNotInteger() []byte {
 	return EncodeError("ERR value is not an integer or out of range")
 }
+
+// EncodeWrongType returns an encoded wrong-type error response.
+func EncodeWrongType() []byte {
+	return EncodeError("WRONGTYPE Operation against a key holding the wrong kind of value")
+}

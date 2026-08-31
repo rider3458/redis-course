@@ -122,6 +122,19 @@ func EncodeInteger(value int64) []byte {
 	return []byte(":" + strconv.FormatInt(value, 10) + "\r\n")
 }
 
+func EncodeArrayBulkStrings(values []string) []byte {
+	var builder strings.Builder
+	builder.WriteString("*")
+	builder.WriteString(strconv.Itoa(len(values)))
+	builder.WriteString("\r\n")
+
+	for _, value := range values {
+		builder.Write(EncodeBulkString(value))
+	}
+
+	return []byte(builder.String())
+}
+
 func EncodeError(message string) []byte {
 	return []byte("-" + message + "\r\n")
 }
