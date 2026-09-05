@@ -31,6 +31,16 @@ func DispatchCommand(cmd *Command) []byte {
 		return HandleSISMEMBER(cmd)
 	case "SMEMBERS":
 		return HandleSMEMBERS(cmd)
+	case "ZADD":
+		return HandleZADD(cmd)
+	case "ZSCORE":
+		return HandleZSCORE(cmd)
+	case "ZRANK":
+		return HandleZRANK(cmd)
+	case "ZRANGE":
+		return HandleZRANGE(cmd)
+	case "ZREM":
+		return HandleZREM(cmd)
 
 	default:
 		return EncodeUnknownCommand(cmd.Cmd)

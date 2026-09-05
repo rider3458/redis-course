@@ -14,6 +14,7 @@ type ValueType uint8
 const (
 	ValueTypeString ValueType = iota
 	ValueTypeSimpleSet
+	ValueTypeSortedSet
 )
 
 func (t ValueType) String() string {
@@ -22,6 +23,8 @@ func (t ValueType) String() string {
 		return "string"
 	case ValueTypeSimpleSet:
 		return "set"
+	case ValueTypeSortedSet:
+		return "zset"
 	default:
 		return "unknown"
 	}
