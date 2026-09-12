@@ -16,6 +16,7 @@ const (
 	ValueTypeSimpleSet
 	ValueTypeSortedSet
 	ValueTypeCountMinSketch
+	ValueTypeBloomFilter
 )
 
 func (t ValueType) String() string {
@@ -28,6 +29,8 @@ func (t ValueType) String() string {
 		return "zset"
 	case ValueTypeCountMinSketch:
 		return "cms"
+	case ValueTypeBloomFilter:
+		return "bf"
 	default:
 		return "unknown"
 	}

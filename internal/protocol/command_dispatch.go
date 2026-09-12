@@ -53,6 +53,18 @@ func DispatchCommand(cmd *Command) []byte {
 		return HandleCMSInfo(cmd)
 	case "CMS.MERGE":
 		return HandleCMSMerge(cmd)
+	case "BF.RESERVE":
+		return HandleBFReserve(cmd)
+	case "BF.ADD":
+		return HandleBFAdd(cmd)
+	case "BF.EXISTS":
+		return HandleBFExists(cmd)
+	case "BF.MADD":
+		return HandleBFMAdd(cmd)
+	case "BF.MEXISTS":
+		return HandleBFMExists(cmd)
+	case "BF.INFO":
+		return HandleBFInfo(cmd)
 
 	default:
 		return EncodeUnknownCommand(cmd.Cmd)
