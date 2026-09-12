@@ -15,6 +15,7 @@ const (
 	ValueTypeString ValueType = iota
 	ValueTypeSimpleSet
 	ValueTypeSortedSet
+	ValueTypeCountMinSketch
 )
 
 func (t ValueType) String() string {
@@ -25,6 +26,8 @@ func (t ValueType) String() string {
 		return "set"
 	case ValueTypeSortedSet:
 		return "zset"
+	case ValueTypeCountMinSketch:
+		return "cms"
 	default:
 		return "unknown"
 	}

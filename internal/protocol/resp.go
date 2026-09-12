@@ -123,13 +123,22 @@ func EncodeInteger(value int64) []byte {
 }
 
 func EncodeArrayBulkStrings(values []string) []byte {
+	elements := make([][]byte, len(values))
+	for index, value := range values {
+		elements[index] = EncodeBulkString(value)
+	}
+	return EncodeArray(elements)
+}
+
+// EncodeArray encodes pre-encoded RESP elements as an array.
+func EncodeArray(elements [][]byte) []byte {
 	var builder strings.Builder
 	builder.WriteString("*")
-	builder.WriteString(strconv.Itoa(len(values)))
+	builder.WriteString(strconv.Itoa(len(elements)))
 	builder.WriteString("\r\n")
 
-	for _, value := range values {
-		builder.Write(EncodeBulkString(value))
+	for _, element := range elements {
+		builder.Write(element)
 	}
 
 	return []byte(builder.String())

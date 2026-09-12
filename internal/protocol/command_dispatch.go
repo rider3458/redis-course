@@ -41,6 +41,18 @@ func DispatchCommand(cmd *Command) []byte {
 		return HandleZRANGE(cmd)
 	case "ZREM":
 		return HandleZREM(cmd)
+	case "CMS.INITBYDIM":
+		return HandleCMSInitByDim(cmd)
+	case "CMS.INITBYPROB":
+		return HandleCMSInitByProb(cmd)
+	case "CMS.INCRBY":
+		return HandleCMSIncrBy(cmd)
+	case "CMS.QUERY":
+		return HandleCMSQuery(cmd)
+	case "CMS.INFO":
+		return HandleCMSInfo(cmd)
+	case "CMS.MERGE":
+		return HandleCMSMerge(cmd)
 
 	default:
 		return EncodeUnknownCommand(cmd.Cmd)
