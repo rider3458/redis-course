@@ -111,7 +111,7 @@ func EncodeSimpleString(value string) []byte {
 }
 
 func EncodeBulkString(value string) []byte {
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(value), value))
+	return fmt.Appendf(nil, "$%d\r\n%s\r\n", len(value), value)
 }
 
 func EncodeNullBulkString() []byte {
