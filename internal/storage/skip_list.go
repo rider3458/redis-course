@@ -125,6 +125,42 @@ func (s *SkipList) isMember(member string) bool {
 	return ok
 }
 
+func (s *SkipList) len() int {
+	return s.length
+}
+
+func (s *SkipList) Len() int {
+	return s.length
+}
+
+func (s *SkipList) Add(member string, score float64) bool {
+	return s.add(member, score)
+}
+
+func (s *SkipList) Update(member string, score float64) bool {
+	return s.update(member, score)
+}
+
+func (s *SkipList) Remove(member string) bool {
+	return s.remove(member)
+}
+
+func (s *SkipList) GetMemberScore(member string) (float64, bool) {
+	return s.getMemberScore(member)
+}
+
+func (s *SkipList) GetRank(member string) (int, bool) {
+	return s.getRank(member)
+}
+
+func (s *SkipList) GetRange(start, stop int) []string {
+	return s.getRange(start, stop)
+}
+
+func (s *SkipList) IsMember(member string) bool {
+	return s.isMember(member)
+}
+
 func (s *SkipList) randomHeight() int {
 	height := 1
 	for height < maxSkipListHeight && rand.IntN(2) == 1 {

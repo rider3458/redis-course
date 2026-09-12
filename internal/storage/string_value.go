@@ -5,12 +5,6 @@ import (
 	"time"
 )
 
-func New() *Store {
-	return &Store{
-		data: make(map[string]Record),
-	}
-}
-
 func (s *Store) Set(key string, value string, ttl time.Duration) {
 	record := Record{Type: ValueTypeString, Value: value}
 	if ttl > 0 {

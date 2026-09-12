@@ -1,7 +1,87 @@
 package storage
 
+type SortedSetType int
+
+const (
+	SortedSetTypeSkipList SortedSetType = iota
+	SortedSetTypeBPlusTree
+)
+
+const (
+	SortedSetSkipList  = SortedSetTypeSkipList
+	SortedSetBPlusTree = SortedSetTypeBPlusTree
+)
+
+type sortedSetIndex interface {
+	add(member string, score float64) bool
+	update(member string, score float64) bool
+	remove(member string) bool
+	getMemberScore(member string) (float64, bool)
+	getRank(member string) (int, bool)
+	getRange(start, stop int) []string
+	isMember(member string) bool
+	len() int
+}
+
 type SortedSet struct {
-	list *SkipList
+	index sortedSetIndex
+}
+
+func NewSortedSet(impl ...SortedSetType) *SortedSet {
+	t := SortedSetTypeSkipList
+	if len(impl) > 0 {
+		t = impl[0]
+	}
+	switch t {
+	case SortedSetTypeBPlusTree:
+		return &SortedSet{index: NewBPlusTree()}
+	default:
+		return &SortedSet{index: NewSkipList()}
+	}
+}
+
+func NewSortedSetWithSkipList() *SortedSet {
+	return &SortedSet{index: NewSkipList()}
+}
+
+func NewSortedSetWithBPlusTree() *SortedSet {
+	return &SortedSet{index: NewBPlusTree()}
+}
+
+func (s *SortedSet) Index() any {
+	return s.index
+}
+
+func (s *SortedSet) Add(member string, score float64) bool {
+	return s.index.add(member, score)
+}
+
+func (s *SortedSet) Update(member string, score float64) bool {
+	return s.index.update(member, score)
+}
+
+func (s *SortedSet) Remove(member string) bool {
+	return s.index.remove(member)
+}
+
+func (s *SortedSet) GetMemberScore(member string) (float64, bool) {
+	return s.index.getMemberScore(member)
+}
+
+func (s *SortedSet) GetRank(member string) (int, bool) {
+	return s.index.getRank(member)
+}
+
+func (s *SortedSet) GetRange(start, stop int) []string {
+	return s.index.getRange(start, stop)
+}
+
+func (s *SortedSet) IsMember(member string) bool {
+	return s.index.isMember(member)
+}
+
+func (s *SortedSet) Len() int {
+	return s.index.len()
 }
 
 func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
@@ -15,10 +95,10 @@ func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 	}
 
 	if !ok {
-		set := &SortedSet{list: NewSkipList()}
+		set := NewSortedSet(s.sortedSetType)
 		added := 0
 		for member, score := range members {
-			if set.list.add(member, score) {
+			if set.index.add(member, score) {
 				added++
 			}
 		}
@@ -36,7 +116,7 @@ func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 
 	added := 0
 	for member, score := range members {
-		if set.list.add(member, score) {
+		if set.index.add(member, score) {
 			added++
 		}
 	}
@@ -48,7 +128,7 @@ func (s *Store) ZScore(key, member string) (float64, bool, error) {
 	if err != nil || !found {
 		return 0, false, err
 	}
-	score, found := set.list.getMemberScore(member)
+	score, found := set.index.getMemberScore(member)
 	return score, found, nil
 }
 
@@ -57,7 +137,7 @@ func (s *Store) ZRank(key, member string) (int, bool, error) {
 	if err != nil || !found {
 		return 0, false, err
 	}
-	rank, found := set.list.getRank(member)
+	rank, found := set.index.getRank(member)
 	return rank, found, nil
 }
 
@@ -69,7 +149,7 @@ func (s *Store) ZRange(key string, start, stop int) ([]string, error) {
 	if !found {
 		return []string{}, nil
 	}
-	return set.list.getRange(start, stop), nil
+	return set.index.getRange(start, stop), nil
 }
 
 func (s *Store) ZRem(key string, members ...string) (int, error) {
@@ -94,11 +174,11 @@ func (s *Store) ZRem(key string, members ...string) (int, error) {
 
 	removed := 0
 	for _, member := range members {
-		if set.list.remove(member) {
+		if set.index.remove(member) {
 			removed++
 		}
 	}
-	if set.list.length == 0 {
+	if set.index.len() == 0 {
 		delete(s.data, key)
 	}
 	return removed, nil
