@@ -19,22 +19,19 @@ func (s *Store) Set(key string, value string, ttl time.Duration) {
 func (s *Store) Get(key string) (string, bool) {
 	s.mu.RLock()
 	record, ok := s.data[key]
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		return "", false
 	}
 
 	if isExpired(record) {
-		s.mu.Lock()
-		current, exists := s.data[key]
-		if exists && isExpired(current) {
-			delete(s.data, key)
-		}
-		s.mu.Unlock()
+		s.mu.RUnlock()
+		s.deleteIfExpired(key)
 		return "", false
 	}
 
 	value, ok := record.Value.(string)
+	s.mu.RUnlock()
 	if !ok {
 		return "", false
 	}
@@ -67,33 +64,26 @@ func (s *Store) Expire(key string, ttl time.Duration) bool {
 func (s *Store) TTL(key string) int64 {
 	s.mu.RLock()
 	record, ok := s.data[key]
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		return -2
 	}
 
 	if isExpired(record) {
-		s.mu.Lock()
-		current, exists := s.data[key]
-		if exists && isExpired(current) {
-			delete(s.data, key)
-		}
-		s.mu.Unlock()
+		s.mu.RUnlock()
+		s.deleteIfExpired(key)
 		return -2
 	}
 
 	if record.TTL.IsZero() {
+		s.mu.RUnlock()
 		return -1
 	}
 
 	remaining := time.Until(record.TTL)
+	s.mu.RUnlock()
 	if remaining <= 0 {
-		s.mu.Lock()
-		current, exists := s.data[key]
-		if exists && isExpired(current) {
-			delete(s.data, key)
-		}
-		s.mu.Unlock()
+		s.deleteIfExpired(key)
 		return -2
 	}
 
@@ -120,20 +110,17 @@ func (s *Store) Exists(keys ...string) int {
 	for _, key := range keys {
 		s.mu.RLock()
 		record, ok := s.data[key]
-		s.mu.RUnlock()
 		if !ok {
+			s.mu.RUnlock()
 			continue
 		}
 
 		if isExpired(record) {
-			s.mu.Lock()
-			current, exists := s.data[key]
-			if exists && isExpired(current) {
-				delete(s.data, key)
-			}
-			s.mu.Unlock()
+			s.mu.RUnlock()
+			s.deleteIfExpired(key)
 			continue
 		}
+		s.mu.RUnlock()
 
 		count++
 	}
@@ -176,4 +163,13 @@ func isExpired(record Record) bool {
 		return false
 	}
 	return time.Now().UTC().After(record.TTL)
+}
+
+func (s *Store) deleteIfExpired(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if record, ok := s.data[key]; ok && isExpired(record) {
+		delete(s.data, key)
+	}
 }

@@ -1,6 +1,10 @@
 package storage
 
-import "testing"
+import (
+	"fmt"
+	"sync"
+	"testing"
+)
 
 func TestSortedSetOperations(t *testing.T) {
 	for _, opt := range []Option{WithSkipList(), WithBPlusTree()} {
@@ -97,6 +101,39 @@ func TestSortedSetTypeOption(t *testing.T) {
 	set2 := NewSortedSet(SortedSetTypeBPlusTree)
 	if _, ok := set2.Index().(*BPlusTree); !ok {
 		t.Fatalf("expected BPlusTree index, got %T", set2.Index())
+	}
+}
+
+func TestSortedSetConcurrentAccess(t *testing.T) {
+	for _, opt := range []Option{WithSkipList(), WithBPlusTree()} {
+		store := New(opt)
+		if _, err := store.ZAdd("scores", map[string]float64{"member": 0}); err != nil {
+			t.Fatalf("ZAdd setup error: %v", err)
+		}
+
+		var group sync.WaitGroup
+		for worker := range 4 {
+			group.Add(1)
+			go func(worker int) {
+				defer group.Done()
+				member := fmt.Sprintf("member-%d", worker)
+				for score := range 100 {
+					if _, err := store.ZAdd("scores", map[string]float64{member: float64(score)}); err != nil {
+						t.Errorf("ZAdd error: %v", err)
+					}
+					if _, _, err := store.ZScore("scores", member); err != nil {
+						t.Errorf("ZScore error: %v", err)
+					}
+					if _, _, err := store.ZRank("scores", member); err != nil {
+						t.Errorf("ZRank error: %v", err)
+					}
+					if _, err := store.ZRange("scores", 0, -1); err != nil {
+						t.Errorf("ZRange error: %v", err)
+					}
+				}
+			}(worker)
+		}
+		group.Wait()
 	}
 }
 

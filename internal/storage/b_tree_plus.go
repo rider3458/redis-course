@@ -18,6 +18,7 @@ type BPlusTreeNode struct {
 	items    []bPlusItem
 	keys     []bPlusItem
 	children []*BPlusTreeNode
+	count    int
 	next     *BPlusTreeNode
 	prev     *BPlusTreeNode
 }
@@ -73,6 +74,7 @@ func (b *BPlusTree) add(member string, score float64) bool {
 	}
 	b.members[member] = score
 	b.length++
+	b.refreshCounts(b.root)
 	return true
 }
 
@@ -176,6 +178,7 @@ func (b *BPlusTree) remove(member string) bool {
 			b.root = b.root.children[0]
 		}
 	}
+	b.refreshCounts(b.root)
 	return true
 }
 
@@ -233,19 +236,31 @@ func (b *BPlusTree) getMemberScore(member string) (float64, bool) {
 }
 
 func (b *BPlusTree) getRank(member string) (int, bool) {
-	if _, ok := b.members[member]; !ok {
+	score, ok := b.members[member]
+	if !ok {
 		return 0, false
 	}
+
+	item := bPlusItem{score: score, member: member}
 	rank := 0
-	for node := b.leafHead; node != nil; node = node.next {
-		for _, item := range node.items {
-			if item.member == member {
-				return rank, true
-			}
-			rank++
+	node := b.root
+	for !node.isLeaf {
+		idx := sort.Search(len(node.keys), func(i int) bool {
+			return bPlusLess(item.score, item.member, node.keys[i].score, node.keys[i].member)
+		})
+		for _, child := range node.children[:idx] {
+			rank += child.count
 		}
+		node = node.children[idx]
 	}
-	return 0, false
+
+	idx := sort.Search(len(node.items), func(i int) bool {
+		return !bPlusLess(node.items[i].score, node.items[i].member, item.score, item.member)
+	})
+	if idx == len(node.items) || node.items[idx] != item {
+		return 0, false
+	}
+	return rank + idx, true
 }
 
 func (b *BPlusTree) getRange(start, stop int) []string {
@@ -290,8 +305,17 @@ func (b *BPlusTree) len() int {
 	return b.length
 }
 
-func (b *BPlusTree) Len() int {
-	return b.length
+func (b *BPlusTree) refreshCounts(node *BPlusTreeNode) int {
+	if node.isLeaf {
+		node.count = len(node.items)
+		return node.count
+	}
+
+	node.count = 0
+	for _, child := range node.children {
+		node.count += b.refreshCounts(child)
+	}
+	return node.count
 }
 
 func (b *BPlusTree) Add(member string, score float64) bool {

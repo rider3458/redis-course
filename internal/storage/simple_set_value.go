@@ -92,56 +92,54 @@ func (s *Store) SRem(key string, members ...string) (int, error) {
 func (s *Store) SIsMember(key string, member string) (int, error) {
 	s.mu.RLock()
 	record, ok := s.data[key]
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		return 0, nil
 	}
 	if isExpired(record) {
-		s.mu.Lock()
-		current, exists := s.data[key]
-		if exists && isExpired(current) {
-			delete(s.data, key)
-		}
-		s.mu.Unlock()
+		s.mu.RUnlock()
+		s.deleteIfExpired(key)
 		return 0, nil
 	}
 	if record.Type != ValueTypeSimpleSet {
+		s.mu.RUnlock()
 		return 0, ErrWrongType
 	}
 
 	set, ok := record.Value.(map[string]struct{})
 	if !ok {
+		s.mu.RUnlock()
 		return 0, ErrWrongType
 	}
 
 	if _, exists := set[member]; exists {
+		s.mu.RUnlock()
 		return 1, nil
 	}
+	s.mu.RUnlock()
 	return 0, nil
 }
 
 func (s *Store) SMembers(key string) ([]string, error) {
 	s.mu.RLock()
 	record, ok := s.data[key]
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		return []string{}, nil
 	}
 	if isExpired(record) {
-		s.mu.Lock()
-		current, exists := s.data[key]
-		if exists && isExpired(current) {
-			delete(s.data, key)
-		}
-		s.mu.Unlock()
+		s.mu.RUnlock()
+		s.deleteIfExpired(key)
 		return []string{}, nil
 	}
 	if record.Type != ValueTypeSimpleSet {
+		s.mu.RUnlock()
 		return nil, ErrWrongType
 	}
 
 	set, ok := record.Value.(map[string]struct{})
 	if !ok {
+		s.mu.RUnlock()
 		return nil, ErrWrongType
 	}
 
@@ -149,6 +147,7 @@ func (s *Store) SMembers(key string) ([]string, error) {
 	for member := range set {
 		members = append(members, member)
 	}
+	s.mu.RUnlock()
 	sort.Strings(members)
 	return members, nil
 }

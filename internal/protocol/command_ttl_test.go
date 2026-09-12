@@ -37,7 +37,7 @@ func TestHandleTTL(t *testing.T) {
 			setup: func(s *storage.Store) {
 				s.Set("k", "v", 3*time.Second)
 			},
-			cmd:  &Command{Cmd: "TTL", Args: []string{"k"}},
+			cmd: &Command{Cmd: "TTL", Args: []string{"k"}},
 		},
 	}
 

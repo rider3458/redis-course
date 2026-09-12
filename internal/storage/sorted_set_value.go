@@ -124,7 +124,10 @@ func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 }
 
 func (s *Store) ZScore(key, member string) (float64, bool, error) {
-	set, found, err := s.sortedSet(key)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	set, found, err := s.sortedSetLocked(key)
 	if err != nil || !found {
 		return 0, false, err
 	}
@@ -133,7 +136,10 @@ func (s *Store) ZScore(key, member string) (float64, bool, error) {
 }
 
 func (s *Store) ZRank(key, member string) (int, bool, error) {
-	set, found, err := s.sortedSet(key)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	set, found, err := s.sortedSetLocked(key)
 	if err != nil || !found {
 		return 0, false, err
 	}
@@ -142,7 +148,10 @@ func (s *Store) ZRank(key, member string) (int, bool, error) {
 }
 
 func (s *Store) ZRange(key string, start, stop int) ([]string, error) {
-	set, found, err := s.sortedSet(key)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	set, found, err := s.sortedSetLocked(key)
 	if err != nil {
 		return nil, err
 	}
@@ -184,20 +193,12 @@ func (s *Store) ZRem(key string, members ...string) (int, error) {
 	return removed, nil
 }
 
-func (s *Store) sortedSet(key string) (*SortedSet, bool, error) {
-	s.mu.RLock()
+func (s *Store) sortedSetLocked(key string) (*SortedSet, bool, error) {
 	record, ok := s.data[key]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, false, nil
 	}
 	if isExpired(record) {
-		s.mu.Lock()
-		current, exists := s.data[key]
-		if exists && isExpired(current) {
-			delete(s.data, key)
-		}
-		s.mu.Unlock()
 		return nil, false, nil
 	}
 	if record.Type != ValueTypeSortedSet {

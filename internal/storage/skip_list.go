@@ -129,10 +129,6 @@ func (s *SkipList) len() int {
 	return s.length
 }
 
-func (s *SkipList) Len() int {
-	return s.length
-}
-
 func (s *SkipList) Add(member string, score float64) bool {
 	return s.add(member, score)
 }
