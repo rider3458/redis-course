@@ -5,24 +5,30 @@ Using go1.26.0
 ### Simple TCP server (goroutine per connection)
 
 ```bash
-go run ./cmd/tcp-server
+make run-tcp
 ```
 
 ### TCP server with worker pool
 
 ```bash
-go run ./cmd/thread-pool-server
+make run-thread-pool
 ```
 
 ### TCP server with I/O multiplexing (epoll)
 
 ```bash
-go run ./cmd/io-multiplexing-server
+make run-io-multiplexing
+```
+
+### RESP server
+
+```bash
+make run-resp
 ```
 
 Note: I/O multiplexing mode uses epoll and is only supported on Linux.
-If not on Linux, uses
+If not on Linux, use
 
 ```bash
-docker compose run --rm go go run ./cmd/io-multiplexing-server
+make run-io-multiplexing-docker
 ```
