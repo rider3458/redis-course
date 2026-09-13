@@ -65,6 +65,8 @@ func DispatchCommand(cmd *Command) []byte {
 		return HandleBFMExists(cmd)
 	case "BF.INFO":
 		return HandleBFInfo(cmd)
+	case "INFO":
+		return HandleINFO(cmd)
 
 	default:
 		return EncodeUnknownCommand(cmd.Cmd)
