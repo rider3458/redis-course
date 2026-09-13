@@ -12,7 +12,20 @@ func (s *Store) Set(key string, value string, ttl time.Duration) {
 	}
 
 	s.mu.Lock()
+	if previous, ok := s.data[key]; ok {
+		if isExpired(previous) {
+			s.removeExpired(key, previous)
+		} else {
+			s.data[key] = record
+			s.trackOverwrite(key, previous, record)
+			s.evictLocked()
+			s.mu.Unlock()
+			return
+		}
+	}
 	s.data[key] = record
+	s.trackInsert(key, record)
+	s.evictLocked()
 	s.mu.Unlock()
 }
 
@@ -21,20 +34,27 @@ func (s *Store) Get(key string) (string, bool) {
 	record, ok := s.data[key]
 	if !ok {
 		s.mu.RUnlock()
+		s.misses.Add(1)
 		return "", false
 	}
 
 	if isExpired(record) {
 		s.mu.RUnlock()
 		s.deleteIfExpired(key)
+		s.misses.Add(1)
 		return "", false
 	}
 
 	value, ok := record.Value.(string)
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
+		s.misses.Add(1)
 		return "", false
 	}
+
+	s.hits.Add(1)
+	s.notifyAccess(key)
+	s.mu.RUnlock()
 
 	return value, true
 }
@@ -48,15 +68,18 @@ func (s *Store) Expire(key string, ttl time.Duration) bool {
 
 	s.mu.Lock()
 	record, ok := s.data[key]
-	if !ok || isExpired(record) {
-		if ok && isExpired(record) {
-			delete(s.data, key)
-		}
+	if !ok {
+		s.mu.Unlock()
+		return false
+	}
+	if isExpired(record) {
+		s.removeExpired(key, record)
 		s.mu.Unlock()
 		return false
 	}
 	record.TTL = expiresAt
 	s.data[key] = record
+	s.notifyAccess(key)
 	s.mu.Unlock()
 	return true
 }
@@ -95,8 +118,9 @@ func (s *Store) Delete(keys ...string) int {
 
 	s.mu.Lock()
 	for _, key := range keys {
-		if _, ok := s.data[key]; ok {
+		if record, ok := s.data[key]; ok {
 			delete(s.data, key)
+			s.trackRemove(key, record)
 			deleted++
 		}
 	}
@@ -133,7 +157,7 @@ func (s *Store) Incr(key string) (int64, error) {
 
 	record, ok := s.data[key]
 	if ok && isExpired(record) {
-		delete(s.data, key)
+		s.removeExpired(key, record)
 		ok = false
 	}
 
@@ -154,7 +178,14 @@ func (s *Store) Incr(key string) (int64, error) {
 	}
 
 	next := current + 1
-	s.data[key] = Record{Type: ValueTypeString, Value: strconv.FormatInt(next, 10), TTL: ttl}
+	nextRecord := Record{Type: ValueTypeString, Value: strconv.FormatInt(next, 10), TTL: ttl}
+	s.data[key] = nextRecord
+	if ok {
+		s.trackOverwrite(key, record, nextRecord)
+	} else {
+		s.trackInsert(key, nextRecord)
+	}
+	s.evictLocked()
 	return next, nil
 }
 
@@ -170,6 +201,6 @@ func (s *Store) deleteIfExpired(key string) {
 	defer s.mu.Unlock()
 
 	if record, ok := s.data[key]; ok && isExpired(record) {
-		delete(s.data, key)
+		s.removeExpired(key, record)
 	}
 }

@@ -29,6 +29,11 @@ type CountMinSketch struct {
 	count    uint64
 }
 
+// size approximates the sketch footprint from its counter matrix.
+func (s *CountMinSketch) size() int64 {
+	return int64(s.width) * int64(s.depth) * 8
+}
+
 func NewCountMinSketch(width, depth uint64) (*CountMinSketch, error) {
 	if width == 0 || depth == 0 || width > uint64(^uint(0)>>1) || depth > uint64(^uint(0)>>1) {
 		return nil, ErrCMSIncompatible
@@ -72,10 +77,16 @@ func (s *Store) cmsInitSketch(key string, sketch *CountMinSketch) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if record, ok := s.data[key]; ok && !isExpired(record) {
-		return ErrKeyExists
+	if record, ok := s.data[key]; ok {
+		if !isExpired(record) {
+			return ErrKeyExists
+		}
+		s.removeExpired(key, record)
 	}
-	s.data[key] = Record{Type: ValueTypeCountMinSketch, Value: sketch}
+	next := Record{Type: ValueTypeCountMinSketch, Value: sketch}
+	s.data[key] = next
+	s.trackInsert(key, next)
+	s.evictLocked()
 	return nil
 }
 
@@ -107,6 +118,7 @@ func (s *Store) CMSIncrBy(key string, increments []CMSIncrement) ([]uint64, erro
 		results[index] = sketch.query(increment.Item)
 	}
 
+	s.notifyAccess(key)
 	return results, nil
 }
 
@@ -119,6 +131,7 @@ func (s *Store) CMSQuery(key string, items []string) ([]uint64, error) {
 		return nil, err
 	}
 
+	s.notifyAccess(key)
 	counts := make([]uint64, len(items))
 	for index, item := range items {
 		counts[index] = sketch.query(item)
@@ -134,6 +147,7 @@ func (s *Store) CMSInfo(key string) (CMSInfo, error) {
 	if err != nil {
 		return CMSInfo{}, err
 	}
+	s.notifyAccess(key)
 	return CMSInfo{Width: sketch.width, Depth: sketch.depth, Count: sketch.count}, nil
 }
 
@@ -151,6 +165,7 @@ func (s *Store) CMSMerge(destination string, sourceKeys []string, weights []uint
 		if err != nil {
 			return err
 		}
+		s.notifyAccess(key)
 		sources[index] = sketch
 	}
 
@@ -185,10 +200,22 @@ func (s *Store) CMSMerge(destination string, sourceKeys []string, weights []uint
 		merged.count += addition
 	}
 
-	if record, ok := s.data[destination]; ok && !isExpired(record) && record.Type != ValueTypeCountMinSketch {
-		return ErrWrongType
+	if record, ok := s.data[destination]; ok {
+		if !isExpired(record) {
+			if record.Type != ValueTypeCountMinSketch {
+				return ErrWrongType
+			}
+			next := Record{Type: ValueTypeCountMinSketch, Value: merged}
+			s.data[destination] = next
+			s.trackOverwrite(destination, record, next)
+			return nil
+		}
+		s.removeExpired(destination, record)
 	}
-	s.data[destination] = Record{Type: ValueTypeCountMinSketch, Value: merged}
+	next := Record{Type: ValueTypeCountMinSketch, Value: merged}
+	s.data[destination] = next
+	s.trackInsert(destination, next)
+	s.evictLocked()
 	return nil
 }
 

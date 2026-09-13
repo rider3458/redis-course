@@ -84,13 +84,32 @@ func (s *SortedSet) Len() int {
 	return s.index.len()
 }
 
+// sortedSetEntryOverhead approximates per-member bookkeeping beyond the member
+// name itself, such as the score and node pointers.
+const sortedSetEntryOverhead int64 = 8
+
+func sortedSetMemberSize(member string) int64 {
+	return int64(len(member)) + sortedSetEntryOverhead
+}
+
+func (s *SortedSet) size() int64 {
+	if s.index.len() == 0 {
+		return 0
+	}
+	var total int64
+	for _, member := range s.index.getRange(0, s.index.len()-1) {
+		total += sortedSetMemberSize(member)
+	}
+	return total
+}
+
 func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	record, ok := s.data[key]
 	if ok && isExpired(record) {
-		delete(s.data, key)
+		s.removeExpired(key, record)
 		ok = false
 	}
 
@@ -102,7 +121,10 @@ func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 				added++
 			}
 		}
-		s.data[key] = Record{Type: ValueTypeSortedSet, Value: set}
+		next := Record{Type: ValueTypeSortedSet, Value: set}
+		s.data[key] = next
+		s.trackInsert(key, next)
+		s.evictLocked()
 		return added, nil
 	}
 
@@ -115,11 +137,15 @@ func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 	}
 
 	added := 0
+	var memory int64
 	for member, score := range members {
 		if set.index.add(member, score) {
 			added++
+			memory += sortedSetMemberSize(member)
 		}
 	}
+	s.accountMemory(memory)
+	s.notifyAccess(key)
 	return added, nil
 }
 
@@ -131,6 +157,7 @@ func (s *Store) ZScore(key, member string) (float64, bool, error) {
 	if err != nil || !found {
 		return 0, false, err
 	}
+	s.notifyAccess(key)
 	score, found := set.index.getMemberScore(member)
 	return score, found, nil
 }
@@ -143,6 +170,7 @@ func (s *Store) ZRank(key, member string) (int, bool, error) {
 	if err != nil || !found {
 		return 0, false, err
 	}
+	s.notifyAccess(key)
 	rank, found := set.index.getRank(member)
 	return rank, found, nil
 }
@@ -158,6 +186,7 @@ func (s *Store) ZRange(key string, start, stop int) ([]string, error) {
 	if !found {
 		return []string{}, nil
 	}
+	s.notifyAccess(key)
 	return set.index.getRange(start, stop), nil
 }
 
@@ -170,7 +199,7 @@ func (s *Store) ZRem(key string, members ...string) (int, error) {
 		return 0, nil
 	}
 	if isExpired(record) {
-		delete(s.data, key)
+		s.removeExpired(key, record)
 		return 0, nil
 	}
 	if record.Type != ValueTypeSortedSet {
@@ -182,13 +211,19 @@ func (s *Store) ZRem(key string, members ...string) (int, error) {
 	}
 
 	removed := 0
+	var memory int64
 	for _, member := range members {
 		if set.index.remove(member) {
 			removed++
+			memory -= sortedSetMemberSize(member)
 		}
 	}
+	s.accountMemory(memory)
 	if set.index.len() == 0 {
 		delete(s.data, key)
+		s.trackRemove(key, record)
+	} else {
+		s.notifyAccess(key)
 	}
 	return removed, nil
 }

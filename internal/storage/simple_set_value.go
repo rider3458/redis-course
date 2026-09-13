@@ -8,7 +8,7 @@ func (s *Store) SAdd(key string, members ...string) (int, error) {
 
 	record, ok := s.data[key]
 	if ok && isExpired(record) {
-		delete(s.data, key)
+		s.removeExpired(key, record)
 		ok = false
 	}
 
@@ -22,7 +22,10 @@ func (s *Store) SAdd(key string, members ...string) (int, error) {
 			set[member] = struct{}{}
 			added++
 		}
-		s.data[key] = Record{Type: ValueTypeSimpleSet, Value: set}
+		next := Record{Type: ValueTypeSimpleSet, Value: set}
+		s.data[key] = next
+		s.trackInsert(key, next)
+		s.evictLocked()
 		return added, nil
 	}
 
@@ -36,16 +39,20 @@ func (s *Store) SAdd(key string, members ...string) (int, error) {
 	}
 
 	added := 0
+	var memory int64
 	for _, member := range members {
 		if _, exists := set[member]; exists {
 			continue
 		}
 		set[member] = struct{}{}
 		added++
+		memory += int64(len(member))
 	}
 
 	record.Value = set
 	s.data[key] = record
+	s.accountMemory(memory)
+	s.notifyAccess(key)
 	return added, nil
 }
 
@@ -58,7 +65,7 @@ func (s *Store) SRem(key string, members ...string) (int, error) {
 		return 0, nil
 	}
 	if isExpired(record) {
-		delete(s.data, key)
+		s.removeExpired(key, record)
 		return 0, nil
 	}
 	if record.Type != ValueTypeSimpleSet {
@@ -71,21 +78,26 @@ func (s *Store) SRem(key string, members ...string) (int, error) {
 	}
 
 	removed := 0
+	var memory int64
 	for _, member := range members {
 		if _, exists := set[member]; !exists {
 			continue
 		}
 		delete(set, member)
 		removed++
+		memory -= int64(len(member))
 	}
+	s.accountMemory(memory)
 
 	if len(set) == 0 {
 		delete(s.data, key)
+		s.trackRemove(key, record)
 		return removed, nil
 	}
 
 	record.Value = set
 	s.data[key] = record
+	s.notifyAccess(key)
 	return removed, nil
 }
 
@@ -112,11 +124,12 @@ func (s *Store) SIsMember(key string, member string) (int, error) {
 		return 0, ErrWrongType
 	}
 
-	if _, exists := set[member]; exists {
-		s.mu.RUnlock()
+	_, exists := set[member]
+	s.notifyAccess(key)
+	s.mu.RUnlock()
+	if exists {
 		return 1, nil
 	}
-	s.mu.RUnlock()
 	return 0, nil
 }
 
@@ -147,6 +160,7 @@ func (s *Store) SMembers(key string) ([]string, error) {
 	for member := range set {
 		members = append(members, member)
 	}
+	s.notifyAccess(key)
 	s.mu.RUnlock()
 	sort.Strings(members)
 	return members, nil

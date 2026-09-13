@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,9 +50,18 @@ type Record struct {
 
 // Store is an in-memory, concurrency-safe key/value store.
 type Store struct {
-	mu            sync.RWMutex
-	data          map[string]Record
-	sortedSetType SortedSetType
+	mu             sync.RWMutex
+	data           map[string]Record
+	sortedSetType  SortedSetType
+	maxEntries     int
+	maxMemory      int64
+	evictionPolicy EvictionPolicy
+
+	hits        atomic.Int64
+	misses      atomic.Int64
+	expiredKeys atomic.Int64
+	evictedKeys atomic.Int64
+	usedMemory  atomic.Int64
 }
 
 // Option configures a Store.
@@ -80,8 +90,9 @@ func WithSkipList() Option {
 
 func New(opts ...Option) *Store {
 	s := &Store{
-		data:          make(map[string]Record),
-		sortedSetType: SortedSetTypeSkipList,
+		data:           make(map[string]Record),
+		sortedSetType:  SortedSetTypeSkipList,
+		evictionPolicy: NewLRU(),
 	}
 	for _, opt := range opts {
 		opt(s)

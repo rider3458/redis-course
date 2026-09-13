@@ -29,6 +29,11 @@ type BloomFilter struct {
 	count     uint64
 }
 
+// size approximates the bloom filter footprint from its bit array.
+func (f *BloomFilter) size() int64 {
+	return int64(len(f.bits)) * 8
+}
+
 func NewBloomFilter(errorRate float64, capacity uint64) (*BloomFilter, error) {
 	if errorRate <= 0 || errorRate >= 1 || math.IsNaN(errorRate) || capacity == 0 {
 		return nil, ErrBloomFilterIncompatible
@@ -63,10 +68,16 @@ func (s *Store) BFReserve(key string, errorRate float64, capacity uint64) error 
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if record, ok := s.data[key]; ok && !isExpired(record) {
-		return ErrKeyExists
+	if record, ok := s.data[key]; ok {
+		if !isExpired(record) {
+			return ErrKeyExists
+		}
+		s.removeExpired(key, record)
 	}
-	s.data[key] = Record{Type: ValueTypeBloomFilter, Value: filter}
+	next := Record{Type: ValueTypeBloomFilter, Value: filter}
+	s.data[key] = next
+	s.trackInsert(key, next)
+	s.evictLocked()
 	return nil
 }
 
@@ -105,6 +116,7 @@ func (s *Store) BFExists(key, item string) (bool, error) {
 	if err != nil || !found {
 		return false, err
 	}
+	s.notifyAccess(key)
 	return filter.exists(item), nil
 }
 
@@ -120,6 +132,7 @@ func (s *Store) BFMultiExists(key string, items []string) ([]bool, error) {
 	if !found {
 		return results, nil
 	}
+	s.notifyAccess(key)
 	for index, item := range items {
 		results[index] = filter.exists(item)
 	}
@@ -137,19 +150,30 @@ func (s *Store) BFInfo(key string) (BloomFilterInfo, error) {
 	if !found {
 		return BloomFilterInfo{}, ErrBloomFilterKeyNotFound
 	}
+	s.notifyAccess(key)
 	return BloomFilterInfo{Capacity: filter.capacity, Size: uint64(len(filter.bits)) * 8, HashCount: filter.hashCount, Count: filter.count}, nil
 }
 
 func (s *Store) bloomFilterForAddLocked(key string) (*BloomFilter, error) {
 	filter, found, err := s.bloomFilterLocked(key)
-	if err != nil || found {
-		return filter, err
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		s.notifyAccess(key)
+		return filter, nil
+	}
+	if record, ok := s.data[key]; ok {
+		s.removeExpired(key, record)
 	}
 	filter, err = NewBloomFilter(defaultBloomFilterErrorRate, defaultBloomFilterCapacity)
 	if err != nil {
 		return nil, err
 	}
-	s.data[key] = Record{Type: ValueTypeBloomFilter, Value: filter}
+	next := Record{Type: ValueTypeBloomFilter, Value: filter}
+	s.data[key] = next
+	s.trackInsert(key, next)
+	s.evictLocked()
 	return filter, nil
 }
 
