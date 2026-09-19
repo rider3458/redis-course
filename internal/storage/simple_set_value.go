@@ -53,6 +53,7 @@ func (s *Store) SAdd(key string, members ...string) (int, error) {
 	s.data[key] = record
 	s.accountMemory(memory)
 	s.notifyAccess(key)
+	s.evictLocked()
 	return added, nil
 }
 

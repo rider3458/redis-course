@@ -208,6 +208,7 @@ func (s *Store) CMSMerge(destination string, sourceKeys []string, weights []uint
 			next := Record{Type: ValueTypeCountMinSketch, Value: merged}
 			s.data[destination] = next
 			s.trackOverwrite(destination, record, next)
+			s.evictLocked()
 			return nil
 		}
 		s.removeExpired(destination, record)

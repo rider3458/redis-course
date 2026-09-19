@@ -1,6 +1,9 @@
 package storage
 
 // StoreStats reports counters that power the INFO command.
+//
+// Hits and Misses count GET lookups only. Other read commands still refresh
+// the eviction policy but do not affect these counters.
 type StoreStats struct {
 	Keys           int
 	ExpiredKeys    int64

@@ -117,6 +117,64 @@ func TestMaxMemoryEvictsComplexKeys(t *testing.T) {
 	}
 }
 
+func TestMaxMemoryEvictsWhenSetMembersGrow(t *testing.T) {
+	s := New(WithMaxMemory(12), WithLRU())
+	if _, err := s.SAdd("s", "aaa"); err != nil {
+		t.Fatalf("unexpected SAdd error: %v", err)
+	}
+	if _, err := s.SAdd("s", "bbbbbbbbbb"); err != nil {
+		t.Fatalf("unexpected SAdd error: %v", err)
+	}
+
+	if got := s.Stats().UsedMemory; got > 12 {
+		t.Fatalf("used memory exceeds limit: got=%d want<=%d", got, 12)
+	}
+	if got := s.Stats().Keys; got != 0 {
+		t.Fatalf("expected the oversized set to be evicted, got %d keys", got)
+	}
+}
+
+func TestMaxMemoryEvictsWhenSortedSetMembersGrow(t *testing.T) {
+	s := New(WithMaxMemory(10), WithLRU())
+	if _, err := s.ZAdd("z", map[string]float64{"m": 1}); err != nil {
+		t.Fatalf("unexpected ZAdd error: %v", err)
+	}
+	if _, err := s.ZAdd("z", map[string]float64{"mm": 2}); err != nil {
+		t.Fatalf("unexpected ZAdd error: %v", err)
+	}
+
+	if got := s.Stats().UsedMemory; got > 10 {
+		t.Fatalf("used memory exceeds limit: got=%d want<=%d", got, 10)
+	}
+	if got := s.Stats().Keys; got != 0 {
+		t.Fatalf("expected the oversized sorted set to be evicted, got %d keys", got)
+	}
+}
+
+func TestMaxMemoryEvictsWhenMergeOverwriteGrows(t *testing.T) {
+	s := New(WithMaxMemory(50), WithLRU())
+	if err := s.CMSInit("a", 2, 2); err != nil {
+		t.Fatalf("unexpected CMSInit error: %v", err)
+	}
+	if err := s.CMSInit("c", 1, 1); err != nil {
+		t.Fatalf("unexpected CMSInit error: %v", err)
+	}
+	if err := s.CMSMerge("c", []string{"a"}, []uint64{1}); err != nil {
+		t.Fatalf("unexpected CMSMerge error: %v", err)
+	}
+
+	stats := s.Stats()
+	if stats.UsedMemory > 50 {
+		t.Fatalf("used memory exceeds limit: got=%d want<=%d", stats.UsedMemory, 50)
+	}
+	if stats.EvictedKeys != 1 {
+		t.Fatalf("unexpected evicted count: got=%d want=%d", stats.EvictedKeys, 1)
+	}
+	if stats.Keys != 1 {
+		t.Fatalf("unexpected key count: got=%d want=%d", stats.Keys, 1)
+	}
+}
+
 func TestEvictionPolicyNames(t *testing.T) {
 	tests := []struct {
 		name   string

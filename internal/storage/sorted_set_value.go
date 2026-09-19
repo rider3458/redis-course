@@ -146,6 +146,7 @@ func (s *Store) ZAdd(key string, members map[string]float64) (int, error) {
 	}
 	s.accountMemory(memory)
 	s.notifyAccess(key)
+	s.evictLocked()
 	return added, nil
 }
 
