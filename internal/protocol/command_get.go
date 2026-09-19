@@ -1,8 +1,6 @@
 package protocol
 
 // HandleGET processes the GET command.
-//
-// TODO: Implement command behavior.
 func HandleGET(cmd *Command) []byte {
 	store := commandStore()
 	argsLen := len(cmd.Args)

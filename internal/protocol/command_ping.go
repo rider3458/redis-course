@@ -1,8 +1,6 @@
 package protocol
 
 // HandlePING processes the PING command.
-//
-// TODO: Implement command behavior.
 func HandlePING(cmd *Command) []byte {
 	argsLen := len(cmd.Args)
 
