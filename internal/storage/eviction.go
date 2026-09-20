@@ -93,6 +93,24 @@ func (s *Store) Evict() int {
 	return s.evictLocked()
 }
 
+// Sweep actively removes expired keys and then evicts until the store is within
+// capacity. It returns the number of keys removed by each step.
+//
+// ponytail: O(n) scan under the store lock per sweep; move to an expiry index
+// if sweeps show up in profiles.
+func (s *Store) Sweep() (expired int, evicted int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for key, record := range s.data {
+		if isExpired(record) {
+			s.removeExpired(key, record)
+			expired++
+		}
+	}
+	return expired, s.evictLocked()
+}
+
 // evictLocked removes keys until the store is within capacity. The caller must
 // hold s.mu.
 func (s *Store) evictLocked() int {

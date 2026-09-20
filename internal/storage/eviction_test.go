@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -361,4 +363,79 @@ func TestStoreNotifiesPolicyOnComplexAccess(t *testing.T) {
 	if len(policy.accesses) != 4 {
 		t.Fatalf("unexpected accesses: %#v", policy.accesses)
 	}
+}
+
+func TestSweepExpiresStaleKeys(t *testing.T) {
+	s := New()
+	s.Set("stale", "v", 10*time.Millisecond)
+	s.Set("fresh", "v", 0)
+	time.Sleep(20 * time.Millisecond)
+
+	expired, evicted := s.Sweep()
+	if expired != 1 {
+		t.Fatalf("unexpected expired count: got=%d want=%d", expired, 1)
+	}
+	if evicted != 0 {
+		t.Fatalf("unexpected evicted count: got=%d want=%d", evicted, 0)
+	}
+	if s.Exists("stale") != 0 {
+		t.Fatal("expected stale key to be removed")
+	}
+	if s.Exists("fresh") != 1 {
+		t.Fatal("expected fresh key to remain")
+	}
+	stats := s.Stats()
+	if stats.ExpiredKeys != 1 {
+		t.Fatalf("unexpected expired keys stat: got=%d want=%d", stats.ExpiredKeys, 1)
+	}
+	if want := int64(len("fresh") + len("v")); stats.UsedMemory != want {
+		t.Fatalf("unexpected used memory: got=%d want=%d", stats.UsedMemory, want)
+	}
+}
+
+func TestSweepEvictsWhenOverCapacity(t *testing.T) {
+	s := New(WithLRU())
+	s.Set("a", "1", 0)
+	s.Set("b", "2", 0)
+
+	// Lower the limit after the keys exist; only Sweep can observe this state
+	// because writes evict eagerly. In-package white-box tweak.
+	s.mu.Lock()
+	s.maxMemory = 2
+	s.mu.Unlock()
+
+	expired, evicted := s.Sweep()
+	if expired != 0 {
+		t.Fatalf("unexpected expired count: got=%d want=%d", expired, 0)
+	}
+	if evicted != 1 {
+		t.Fatalf("unexpected evicted count: got=%d want=%d", evicted, 1)
+	}
+	if s.Exists("a") != 0 {
+		t.Fatal("expected least recently used key a to be evicted")
+	}
+	if s.Exists("b") != 1 {
+		t.Fatal("expected key b to remain")
+	}
+}
+
+func TestSweepConcurrentWithOperations(t *testing.T) {
+	s := New(WithMaxEntries(64), WithLRU())
+	var wg sync.WaitGroup
+	for worker := 0; worker < 2; worker++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				s.Set("k"+strconv.Itoa(i%10), "v", time.Millisecond)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				s.Sweep()
+			}
+		}()
+	}
+	wg.Wait()
 }
