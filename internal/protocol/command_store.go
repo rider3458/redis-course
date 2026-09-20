@@ -19,11 +19,13 @@ func commandStore() *storage.Store {
 }
 
 // ConfigureCommandStore replaces the shared command store with a new store
-// built from opts. Call it before serving commands.
-func ConfigureCommandStore(opts ...storage.Option) {
+// built from opts and returns it. Call it before serving commands.
+func ConfigureCommandStore(opts ...storage.Option) *storage.Store {
+	store := storage.New(opts...)
 	storeMu.Lock()
-	sharedStore = storage.New(opts...)
+	sharedStore = store
 	storeMu.Unlock()
+	return store
 }
 
 // replaceCommandStoreForTest swaps the shared store and returns a restore function.

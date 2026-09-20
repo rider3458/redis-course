@@ -10,9 +10,12 @@ func TestConfigureCommandStore(t *testing.T) {
 	restore := replaceCommandStoreForTest(storage.New())
 	t.Cleanup(restore)
 
-	ConfigureCommandStore(storage.WithMaxMemory(1024), storage.WithLFU())
+	store := ConfigureCommandStore(storage.WithMaxMemory(1024), storage.WithLFU())
+	if commandStore() != store {
+		t.Fatal("expected ConfigureCommandStore to return the active store")
+	}
 
-	stats := commandStore().Stats()
+	stats := store.Stats()
 	if stats.MaxMemory != 1024 {
 		t.Fatalf("unexpected max memory: got=%d want=%d", stats.MaxMemory, 1024)
 	}
