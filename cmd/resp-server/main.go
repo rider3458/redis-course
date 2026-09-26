@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/rider3458/redis-course/internal/protocol"
@@ -17,6 +20,7 @@ func main() {
 	maxMemory := flag.Int64("maxmemory", 0, "evict when approximate memory exceeds this many bytes (0 = unlimited)")
 	policyName := flag.String("maxmemory-policy", "lru", "eviction policy: lru, random, lfu, or noeviction")
 	sweepInterval := flag.Duration("sweep-interval", 100*time.Millisecond, "how often to expire stale keys and enforce capacity (0 = disabled)")
+	shutdownTimeout := flag.Duration("shutdown-timeout", 5*time.Second, "how long to let in-flight commands finish before closing connections")
 	flag.Parse()
 
 	policy, ok := storage.EvictionPolicyByName(*policyName)
@@ -24,6 +28,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown -maxmemory-policy %q\n", *policyName)
 		os.Exit(1)
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	store := protocol.ConfigureCommandStore(
 		storage.WithMaxEntries(*maxEntries),
@@ -35,8 +42,13 @@ func main() {
 		go func() {
 			ticker := time.NewTicker(*sweepInterval)
 			defer ticker.Stop()
-			for range ticker.C {
-				store.Sweep()
+			for {
+				select {
+				case <-ticker.C:
+					store.Sweep()
+				case <-ctx.Done():
+					return
+				}
 			}
 		}()
 	}
@@ -44,7 +56,11 @@ func main() {
 	config := server.ServerConfig{
 		Address:         *address,
 		UseRESPProtocol: true,
+		ShutdownTimeout: *shutdownTimeout,
 	}
 	s := server.New(config)
-	s.Serve()
+	if err := s.ListenAndServe(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+		os.Exit(1)
+	}
 }
